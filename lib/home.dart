@@ -24,7 +24,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final TextEditingController _controller = TextEditingController();
   late StreamSubscription _intentDataStreamSubscription;
-  String url = "";
   String markdown = "";
   String markdownPreview = "";
   bool includeSourceLink = false;
@@ -41,22 +40,22 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // share intent received while running
-    _intentDataStreamSubscription = ReceiveSharingIntent.instance
-        .getMediaStream()
-        .listen(fromIntent, onError: (err) {
-      Fluttertoast.showToast(msg: "Error receiving the intent: $err");
-    });
-
-    // share intent received while closed
-    ReceiveSharingIntent.instance.getInitialMedia().then((value) async {
+    Future(() async {
       var repo = await repoFactory();
       initStateInternal(repo);
-      fromIntent(value);
-      ReceiveSharingIntent.instance.reset();
-    });
+      // share intent received while running
+      _intentDataStreamSubscription = ReceiveSharingIntent.instance
+          .getMediaStream()
+          .listen(fromIntent, onError: (err) {
+        Fluttertoast.showToast(msg: "Error receiving the intent: $err");
+      });
 
-    repoFactory().then(initStateInternal);
+      // share intent received while closed
+      ReceiveSharingIntent.instance.getInitialMedia().then((value) async {
+        fromIntent(value);
+        ReceiveSharingIntent.instance.reset();
+      });
+    });
   }
 
   void initStateInternal(SharedPreferencesSettingsRepository repo) {
@@ -76,6 +75,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _intentDataStreamSubscription.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -87,13 +87,8 @@ class _HomePageState extends State<HomePage> {
     if (urlValue == null || urlValue.isEmpty) {
       return;
     }
-    _controller.text = urlValue;
-    if (_url2MdConverter == null) {
-      var repo = await repoFactory();
-      initStateInternal(repo);
-    }
     setState(() {
-      url = urlValue;
+      _controller.text = urlValue;
     });
     article = await _url2MdConverter?.convertPage(url: urlValue);
     _updateMarkdown();
@@ -178,9 +173,6 @@ class _HomePageState extends State<HomePage> {
         decoration: const InputDecoration(
           hintText: 'Enter a URL',
         ),
-        onChanged: (value) {
-          url = value;
-        },
         controller: _controller,
       ),
     );
@@ -262,7 +254,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _convert() async {
-    article = await _url2MdConverter?.convertPage(url: url);
+    article = await _url2MdConverter?.convertPage(url: _controller.text);
     _updateMarkdown();
   }
 
@@ -279,7 +271,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _share() {
-    Share.share(markdown);
+    SharePlus.instance.share(ShareParams(
+      text: markdown,
+      subject: article!.title,
+    ));
   }
 
   void _toClipboard() {
